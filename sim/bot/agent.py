@@ -209,14 +209,14 @@ class BotAgent:
             if i < n - 1:
                 self._wait_between_posts()
 
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"  Results: {self.stats.passed} passed / {self.stats.flagged} flagged / {self.stats.sent} sent")
         print(f"  Detection rate: {self.stats.detection_rate:.1f}%")
         if self.stats.reasons:
             from collections import Counter
             top = Counter(self.stats.reasons).most_common(5)
             print(f"  Top reasons flagged: {top}")
-        print(f"{'─'*60}\n")
+        print(f"{'-'*60}\n")
 
         return self.stats
 
