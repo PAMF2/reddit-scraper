@@ -1,8 +1,6 @@
 # reddit-scraper
 
-Python scraper for Reddit focused on combat sports (MMA, boxing, BJJ, wrestling). Extracts posts, full comment threads, sentiment scores, news/leak detection, and optional Claude AI analysis — all from the public Reddit JSON API with no auth required.
-
----
+Python scraper for Reddit focused on combat sports (MMA, boxing, BJJ, wrestling). Extracts posts, full comment threads, sentiment scores, news/leak detection, and optional Claude AI analysis. All from the public Reddit JSON API with no auth required.
 
 ## Features
 
@@ -15,12 +13,10 @@ Python scraper for Reddit focused on combat sports (MMA, boxing, BJJ, wrestling)
 | **News & leak detection** | Keyword classifier tags posts as `NEWS / RESULT / LEAK / HYPE` |
 | **Notable comment extraction** | Surfaces high-score comments containing news/result/leak keywords |
 | **Claude AI analysis** | Summarizes discussions, extracts fighters, key topics, notable quotes |
-| **Statistical distributions** | Score/sentiment distributions, cross-analysis (score tier × sentiment, depth × sentiment) |
+| **Statistical distributions** | Score/sentiment distributions, cross-analysis (score tier x sentiment, depth x sentiment) |
 | **Multi-subreddit** | Scrape several subs in one command, merged into one JSON |
 | **Clean CSV output** | HTML entities decoded, newlines collapsed, no multiline cells |
 | **Auto fallback** | If JSON API fails, switches to stealth Chromium browser |
-
----
 
 ## Installation
 
@@ -30,10 +26,8 @@ Requires Python 3.10+.
 git clone https://github.com/PAMF2/reddit-scraper.git
 cd reddit-scraper
 pip install -r requirements.txt
-scrapling install   # downloads Chromium (~150MB, one-time — only needed for browser fallback)
+scrapling install   # downloads Chromium (~150MB, one-time, only needed for browser fallback)
 ```
-
----
 
 ## Commands
 
@@ -52,8 +46,6 @@ Posts are tagged with detected categories (e.g. `[NEWS/RESULT]`).
  2. [   871] [ 189]  Sean Strickland reveals shoulder injury  [NEWS/RESULT]
        Difficult-Tree2738 | 2026-05-13 | i.redd.it
 ```
-
----
 
 ### `comments` — scrape a single post's comments
 
@@ -80,8 +72,6 @@ NOTABLE COMMENTS (8 found):
   [HYPE]   u/PinkSkies87 +38: This is such an iconic Rogan call...
 ```
 
----
-
 ### `scrape` — posts + comments in one shot
 
 ```bash
@@ -97,10 +87,8 @@ python main.py scrape --sub MMA --limit 5 --analyze --api-key sk-ant-...
 
 Saves per-post comment CSVs + one merged JSON:
 - `output/posts_MMA_<ts>.csv`
-- `output/comments_<post_id>_<ts>.csv` — one per post, with optional `sentiment` columns
-- `output/full_MMA_<ts>.json` — everything nested
-
----
+- `output/comments_<post_id>_<ts>.csv` (one per post, with optional `sentiment` columns)
+- `output/full_MMA_<ts>.json` (everything nested)
 
 ### `news` — breaking news, leaks, and results only
 
@@ -123,8 +111,6 @@ r/ufc: 10/50 posts matched
 14. [ 981] [533]  Khamzat Chimaev's brother says his body "shut down"    [NEWS]
 ```
 
----
-
 ### `stats` — score/sentiment distributions and cross-analysis
 
 ```bash
@@ -133,11 +119,11 @@ python main.py stats --file output/full_MMA_20260514.json
 
 Reads a saved `full_*.json` file and prints five tables:
 
-- **Post score distribution** — mean, median, stdev, p25/p75/p95, max
-- **Comment sentiment distribution** — avg compound, stdev, p25/p75; positive/negative/neutral counts
-- **Sentiment by score tier** — are comments under viral posts more positive?
-- **Sentiment by comment depth** — does sentiment change deeper in threads?
-- **Most active commenters** — top 10 by comment count
+- **Post score distribution** (mean, median, stdev, p25/p75/p95, max)
+- **Comment sentiment distribution** (avg compound, stdev, p25/p75, positive/negative/neutral counts)
+- **Sentiment by score tier** (are comments under viral posts more positive?)
+- **Sentiment by comment depth** (does tone change deeper in threads?)
+- **Most active commenters** (top 10 by comment count)
 
 ```
   Post Score Distribution
@@ -151,7 +137,7 @@ Reads a saved `full_*.json` file and prints five tables:
 
   Comment Sentiment  n=253
   POSITIVE  ▰▰▰▰▰▰▰▱▱▱▱▱  avg +0.097
-  116 positive (45%)  ·  75 negative (29%)  ·  62 neutral (24%)
+  116 positive (45%)  75 negative (29%)  62 neutral (24%)
 
   Sentiment by Post Score Tier
   Score tier   Comments   Avg compound
@@ -167,8 +153,6 @@ Reads a saved `full_*.json` file and prints five tables:
 ```
 
 Pass `--output <dir>` to also save a `stats_*.json` file with all raw numbers.
-
----
 
 ### `analyze` — Claude AI analysis on saved data
 
@@ -211,8 +195,6 @@ NOTABLE QUOTES:
   "You can't fake that kind of shutdown. Hope he recovers fully."
   "This is why I've always said the UFC pushes fighters too hard."
 ```
-
----
 
 ## CLI reference
 
@@ -283,10 +265,8 @@ stats:
 | value | behavior |
 |---|---|
 | `auto` | JSON API first; browser fallback on failure |
-| `api` | JSON API only — fast, 1s/request, 250+ comments |
-| `browser` | StealthyFetcher — ~10s/request, ~25 results/page |
-
----
+| `api` | JSON API only, fast, 1s/request, 250+ comments |
+| `browser` | StealthyFetcher, ~10s/request, ~25 results/page |
 
 ## Output formats
 
@@ -329,9 +309,9 @@ stats:
 ```json
 [
   {
-    "post": { "id": "t3_1tc3j00", "title": "...", "score": 1502, ... },
-    "sentiment": { "avg_compound": 0.082, "label": "positive", "distribution": {...} },
-    "claude_analysis": { "summary": "...", "fighter_mentions": [...], ... },
+    "post": { "id": "t3_1tc3j00", "title": "...", "score": 1502 },
+    "sentiment": { "avg_compound": 0.082, "label": "positive", "distribution": {} },
+    "claude_analysis": { "summary": "...", "fighter_mentions": [] },
     "comments": [
       {
         "id": "t1_ollb90u",
@@ -341,30 +321,28 @@ stats:
         "body": "I forgot how good Lyoto was.",
         "created": "2026-05-13",
         "permalink": "...",
-        "replies": [...]
+        "replies": []
       }
     ]
   }
 ]
 ```
 
----
-
 ## Code structure
 
 ```
 reddit-scraper/
-├── main.py                  # CLI — posts / comments / scrape / news / analyze / stats
+├── main.py                  # CLI: posts / comments / scrape / news / analyze / stats
 ├── requirements.txt
 ├── scraper/
 │   ├── __init__.py          # public API exports
 │   ├── fetcher.py           # StealthyFetcher wrapper with retry (browser fallback)
-│   ├── reddit_api.py        # JSON API — posts + comments, HTML cleaning, pagination
+│   ├── reddit_api.py        # JSON API: posts + comments, HTML cleaning, pagination
 │   ├── posts.py             # get_posts() with auto/api/browser routing
 │   ├── comments.py          # get_comments() with auto/api/browser routing
 │   ├── sentiment.py         # VADER + fight-lexicon overrides, thread aggregation
-│   ├── news.py              # keyword classifier — news / result / leak / hype
-│   ├── analyzer.py          # Claude AI — post summarizer, fighter extractor
+│   ├── news.py              # keyword classifier: news / result / leak / hype
+│   ├── analyzer.py          # Claude AI: post summarizer, fighter extractor
 │   ├── stats.py             # score/sentiment distributions + cross-analysis
 │   ├── display.py           # Rich terminal UI (tables, panels, colored text)
 │   └── export.py            # JSON / CSV / console output (with optional sentiment cols)
@@ -375,8 +353,6 @@ reddit-scraper/
 │   └── sample_stats_MMA_boxing.json      # statistical report
 └── output/                  # your generated files (gitignored)
 ```
-
----
 
 ## Results
 
@@ -431,11 +407,9 @@ Key findings from this sample:
 - **Deep replies (depth 4+) are the most positive** (avg +0.470) — fans who reply deeply tend to be more engaged and enthusiastic
 - **Stdev of 0.476** reflects high variance — MMA comment sentiment is polarized, not uniform
 
----
-
 ## How it works
 
-### Posts and comments — JSON API
+### Posts and comments via JSON API
 
 Reddit exposes unauthenticated JSON endpoints:
 
@@ -447,22 +421,22 @@ GET https://www.reddit.com/r/{sub}/comments/{id}.json?limit=500
 
 The post listing supports `after` cursor pagination for limits > 100. The comment endpoint returns the full nested tree in one request (~250 comments per post; skips deleted/removed entries).
 
-### Sentiment — VADER + fight lexicon
+### Sentiment via VADER + fight lexicon
 
 The [VADER](https://github.com/cjhutto/vaderSentiment) lexicon was built for social media but doesn't handle fight-community slang well ("savage", "nasty", "beast" score as negative). This scraper adds a custom lexicon layer with fight-appropriate scores:
 
 | word | VADER default | overridden to |
 |---|---|---|
 | `goat` | neutral | +2.5 |
-| `savage`, `beast` | negative | +1.8–2.0 |
+| `savage`, `beast` | negative | +1.8 to +2.0 |
 | `nasty`, `filthy` | negative | +1.0 (fight context) |
-| `robbed` | neutral | −2.0 |
-| `boring` | negative | −2.0 |
-| `juicer`, `cheater` | neutral | −1.5–2.0 |
+| `robbed` | neutral | -2.0 |
+| `boring` | negative | -2.0 |
+| `juicer`, `cheater` | neutral | -1.5 to -2.0 |
 
-Per-comment scores range from −1.0 (very negative) to +1.0 (very positive). Thread-level analysis aggregates all comments and returns a distribution + average compound score.
+Per-comment scores range from -1.0 (very negative) to +1.0 (very positive). Thread-level analysis aggregates all comments and returns a distribution + average compound score.
 
-### News / leak detection
+### News and leak detection
 
 A regex classifier runs against post titles and comment bodies, tagging content into:
 
@@ -487,23 +461,96 @@ Uses `claude-haiku` by default (fast, cheap). Switch to `claude-sonnet-4-6` for 
 
 When the JSON API is blocked (403) or `method="browser"` is set, the scraper launches a real Chromium instance via [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) with patched fingerprints to bypass Reddit's anti-bot detection.
 
----
-
 ## Combat sports subreddits
 
 | subreddit | content |
 |---|---|
-| r/MMA | General MMA — UFC, Bellator, ONE, PFL |
+| r/MMA | General MMA (UFC, Bellator, ONE, PFL) |
 | r/ufc | UFC-specific discussion and results |
-| r/boxing | Professional boxing — all promotions |
+| r/boxing | Professional boxing, all promotions |
 | r/bjj | Brazilian Jiu-Jitsu technique and competition |
 | r/wrestling | Amateur and pro wrestling |
-| r/kickboxing | Kickboxing — K-1, Glory, ONE |
+| r/kickboxing | Kickboxing (K-1, Glory, ONE) |
 | r/WMMA | Women's MMA |
 | r/mmamemes | Post-event reactions and memes |
 | r/fightporn | Amateur and street fight videos |
 
----
+## Next steps
+
+### ML sentiment classifier (scikit-learn)
+
+VADER is lexicon-based and has no memory of context. A trained classifier on scraped data would be more accurate for MMA-specific language:
+
+```python
+# 1. Build a labeled dataset from scraped CSVs
+#    Use sentiment_compound as the soft label (regression) or bucket into 3 classes
+df = pd.read_csv("results/sample_comments_MMA_boxing.csv")
+df["label"] = df["sentiment_compound"].apply(
+    lambda c: "positive" if c >= 0.05 else ("negative" if c <= -0.05 else "neutral")
+)
+
+# 2. Train a TF-IDF + LogisticRegression pipeline
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+
+model = Pipeline([
+    ("tfidf", TfidfVectorizer(ngram_range=(1, 2), max_features=20000)),
+    ("clf",   LogisticRegression(C=5, max_iter=1000)),
+])
+model.fit(df["body"], df["label"])
+
+# 3. Swap into scraper/sentiment.py as an optional backend
+#    Falls back to VADER when model file is not present
+```
+
+The trained model can be serialized with `joblib.dump()` and loaded at startup in `sentiment.py`. Requires `scikit-learn pandas joblib` in requirements.
+
+### Hype indicator
+
+The current `HYPE` tag is binary (keyword match / no match). A regression score from a trained model would rank posts on a continuous hype scale, useful for surfacing genuinely viral discussions before they peak:
+
+```python
+# Features: upvote_ratio, score_velocity (score / post_age_hours),
+#           avg_comment_depth, fraction_positive, hype_keyword_count
+# Target: final_score (scraped 24h later as ground truth)
+
+from sklearn.ensemble import GradientBoostingRegressor
+hype_model = GradientBoostingRegressor(n_estimators=200)
+hype_model.fit(X_train, y_score)
+
+# Output: post.hype_score = float 0.0-1.0, shown in the posts table
+```
+
+### OpenClaw integration
+
+This scraper can feed a Claude plugin (MCP server or OpenClaw-style tool) so Claude can answer fight questions with live Reddit context:
+
+```
+User: "What's Reddit saying about the Poirier vs Holloway fight today?"
+
+Claude calls: reddit_scraper.news(subreddits=["MMA","ufc"], sort="new", limit=50)
+           + reddit_scraper.comments(top_post_url, max_comments=100)
+           + reddit_scraper.analyze(post, comments)
+
+Claude returns: structured summary with sentiment, notable quotes, breaking news flag
+```
+
+The MCP server would expose three tools: `get_posts`, `get_comments`, and `analyze_post`. A Claude Desktop or OpenClaw plugin config would look like:
+
+```json
+{
+  "mcpServers": {
+    "reddit-fight-intel": {
+      "command": "python",
+      "args": ["mcp_server.py"],
+      "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }
+    }
+  }
+}
+```
+
+This turns the scraper into a live fight intelligence feed for any Claude-powered assistant.
 
 ## License
 
