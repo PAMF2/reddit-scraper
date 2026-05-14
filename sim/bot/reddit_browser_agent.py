@@ -224,23 +224,43 @@ def _pick_post(sub):
 
 def _login(page, username, password):
     print("[LOGIN] Navigating to login page...")
+    # Set cookie to opt out of new Reddit before navigating
+    page.context.add_cookies([
+        {"name": "over18",         "value": "1",    "domain": ".reddit.com", "path": "/"},
+        {"name": "redesign_optout","value": "true", "domain": ".reddit.com", "path": "/"},
+    ])
     page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=20000)
     time.sleep(g(2.0, 0.6, lo=1.2))
+
+    # Detect which login page we landed on
+    current = page.url
+    if "www.reddit.com" in current or "reddit.com/login" in current and "old." not in current:
+        # New Reddit login — different selectors
+        user_sel   = "input#loginUsername, input[name='username']"
+        passwd_sel = "input#loginPassword, input[name='password']"
+    else:
+        # Old Reddit login
+        user_sel   = "input[name='user'], input#user_login"
+        passwd_sel = "input[name='passwd'], input#passwd_login"
 
     page.mouse.wheel(0, int(g(80, 30, lo=20)))
     time.sleep(g(0.8, 0.3, lo=0.3))
 
     print("[LOGIN] Typing username...")
-    gaussian_type(page, "input[name='user']", username)
+    gaussian_type(page, user_sel, username)
     time.sleep(g(0.5, 0.2, lo=0.2))
 
     print("[LOGIN] Typing password...")
-    gaussian_type(page, "input[name='passwd']", password)
+    gaussian_type(page, passwd_sel, password)
     time.sleep(g(1.2, 0.4, lo=0.6))
 
     print("[LOGIN] Submitting...")
     gaussian_click(page, "button[type='submit']", sigma=4.0)
     time.sleep(g(3.5, 0.8, lo=2.5))
+
+    # Force old Reddit after login
+    page.goto(f"{BASE}/", wait_until="domcontentloaded", timeout=15000)
+    time.sleep(g(1.5, 0.4, lo=0.8))
 
     try:
         logged_user = page.locator("#header-bottom-right .user a").first.inner_text(timeout=6000).strip()
@@ -280,7 +300,8 @@ def _submit_post(page, sub, title, body, dry_run=False):
         return None
 
     print("[POST] Submitting...")
-    gaussian_click(page, "button.submit[type='submit']", sigma=4.0)
+    # old Reddit submit button has class "btn" or "btn-primary", not "submit"
+    gaussian_click(page, "button[type='submit'], input[type='submit'][value*='submit' i]", sigma=4.0)
     time.sleep(g(3.5, 0.8, lo=2.5))
 
     current = page.url
