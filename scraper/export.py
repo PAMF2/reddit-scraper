@@ -1,5 +1,6 @@
 """
 Export scraped data to JSON, CSV, or pretty-printed console output.
+Sentiment columns are included in CSVs when sentiment analysis is enabled.
 """
 import json
 import csv
@@ -26,10 +27,17 @@ def save_json(data: dict | list, path: str | Path) -> None:
 
 # ── CSV ───────────────────────────────────────────────────────────────────────
 
-def _flatten_comments(comments: list[Comment], post_id: str = "") -> list[dict]:
+def _flatten_comments(
+    comments: list[Comment],
+    post_id: str = "",
+    with_sentiment: bool = False,
+) -> list[dict]:
+    from .sentiment import analyze as _analyze
+
     rows = []
-    def walk(c: Comment, parent_id: str = ""):
-        rows.append({
+
+    def walk(c: Comment, parent_id: str = "") -> None:
+        row: dict = {
             "post_id": post_id,
             "comment_id": c.id,
             "parent_id": parent_id,
@@ -39,9 +47,16 @@ def _flatten_comments(comments: list[Comment], post_id: str = "") -> list[dict]:
             "created": c.created,
             "body": c.body,
             "permalink": c.permalink,
-        })
+        }
+        if with_sentiment:
+            s = _analyze(c.body)
+            row["sentiment"] = s.label
+            row["sentiment_compound"] = s.compound
+            row["sentiment_intensity"] = s.intensity
+        rows.append(row)
         for r in c.replies:
             walk(r, c.id)
+
     for c in comments:
         walk(c)
     return rows
@@ -60,9 +75,14 @@ def save_posts_csv(posts: list[Post], path: str | Path) -> None:
     print(f"[saved] {path}")
 
 
-def save_comments_csv(comments: list[Comment], path: str | Path, post_id: str = "") -> None:
+def save_comments_csv(
+    comments: list[Comment],
+    path: str | Path,
+    post_id: str = "",
+    with_sentiment: bool = False,
+) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    rows = _flatten_comments(comments, post_id)
+    rows = _flatten_comments(comments, post_id, with_sentiment=with_sentiment)
     if not rows:
         return
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -75,8 +95,6 @@ def save_comments_csv(comments: list[Comment], path: str | Path, post_id: str = 
 # ── Console pretty-print ──────────────────────────────────────────────────────
 
 def _p(*args, **kwargs):
-    """Print with UTF-8 safe fallback for Windows cp1252 terminals."""
-    import sys
     text = " ".join(str(a) for a in args)
     try:
         print(text, **kwargs)
@@ -84,23 +102,46 @@ def _p(*args, **kwargs):
         print(text.encode("ascii", errors="replace").decode("ascii"), **kwargs)
 
 
-def print_posts(posts: list[Post]) -> None:
+_SENT_ICON = {
+    "positive": "(+)",
+    "negative": "(-)",
+    "neutral":  "( )",
+}
+
+
+def print_posts(posts: list[Post], show_tags: bool = False) -> None:
+    from .news import tag_text
+
     _p(f"\n{'#':>2}  {'Score':>6}  {'Cmts':>5}  Title")
     _p("-" * 90)
     for i, p in enumerate(posts, 1):
-        _p(f"{i:>2}. [{p.score:>6}] [{p.comment_count:>4}]  {p.title[:65]}")
+        tag_str = ""
+        if show_tags:
+            tag = tag_text(p.title)
+            if tag.any:
+                tag_str = "  [" + "/".join(tag.categories).upper() + "]"
+        _p(f"{i:>2}. [{p.score:>6}] [{p.comment_count:>4}]  {p.title[:65]}{tag_str}")
         _p(f"      {p.author} | {p.created} | {p.domain}")
         _p(f"      {p.permalink}")
         _p()
 
 
-def print_comments(comments: list[Comment], max_depth: int = 3) -> None:
-    def _print(c: Comment, indent: int = 0):
+def print_comments(
+    comments: list[Comment],
+    max_depth: int = 3,
+    with_sentiment: bool = False,
+) -> None:
+    from .sentiment import analyze as _analyze
+
+    def _print(c: Comment, indent: int = 0) -> None:
         if indent > max_depth:
             return
         pad = "  " * indent
-        header = f"{pad}[u/{c.author}  score:{c.score:+}  {c.created}]"
-        _p(header)
+        sent_str = ""
+        if with_sentiment:
+            s = _analyze(c.body)
+            sent_str = f"  {_SENT_ICON.get(s.label, '')} {s.compound:+.2f}"
+        _p(f"{pad}[u/{c.author}  score:{c.score:+}  {c.created}{sent_str}]")
         for line in c.body.split(". "):
             if line.strip():
                 _p(f"{pad}  {line.strip()}")

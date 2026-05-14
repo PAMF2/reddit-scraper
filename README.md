@@ -1,24 +1,23 @@
 # reddit-scraper
 
-A Python scraper for Reddit that extracts posts and full threaded comment trees from any subreddit — built specifically for combat sports analysis (MMA, boxing, BJJ, etc.).
-
-Uses Reddit's public JSON API as the primary method (fast, 200+ comments per thread) with a stealth headless browser ([Scrapling](https://github.com/D4Vinci/Scrapling)) as an automatic fallback.
+Python scraper for Reddit focused on combat sports (MMA, boxing, BJJ, wrestling). Extracts posts, full comment threads, sentiment scores, news/leak detection, and optional Claude AI analysis — all from the public Reddit JSON API with no auth required.
 
 ---
 
-## Why this exists
+## Features
 
-Reddit's API became paid in 2023 and has strict rate limits for registered apps. Plain HTTP requests to Reddit's HTML return `403 Forbidden`. This scraper uses Reddit's undocumented public JSON endpoints — which return full comment trees — and falls back to a stealth Chromium browser when the JSON API is unavailable.
-
----
-
-## What it does
-
-- **Posts**: fetches listing pages (hot/new/top/rising) and extracts title, score, comment count, author, domain, permalink, upvote ratio, and timestamp
-- **Comments**: fetches the full comment thread (200+ comments) via the JSON API and reconstructs the nested reply tree recursively
-- **Multi-subreddit**: scrape multiple subreddits in a single command and merge results into one output folder
-- **Auto-method**: tries the JSON API first (fast, full threads), falls back to the browser if blocked
-- **Export**: saves everything as JSON (nested tree) and CSV (flat with `parent_id` for relational joins)
+| Feature | Detail |
+|---|---|
+| **Posts via JSON API** | ~1s per request, supports >100 posts with automatic pagination |
+| **Full comment threads** | 250+ comments per post via Reddit's undocumented JSON endpoint |
+| **Nested thread tree** | Replies correctly nested by depth; `max_comments` caps total (not top-level) |
+| **Sentiment analysis** | Per-comment VADER scoring tuned for fight-community slang |
+| **News & leak detection** | Keyword classifier tags posts as `NEWS / RESULT / LEAK / HYPE` |
+| **Notable comment extraction** | Surfaces high-score comments containing news/result/leak keywords |
+| **Claude AI analysis** | Summarizes discussions, extracts fighters, key topics, notable quotes |
+| **Multi-subreddit** | Scrape several subs in one command, merged into one JSON |
+| **Clean CSV output** | HTML entities decoded, newlines collapsed, no multiline cells |
+| **Auto fallback** | If JSON API fails, switches to stealth Chromium browser |
 
 ---
 
@@ -30,136 +29,211 @@ Requires Python 3.10+.
 git clone https://github.com/PAMF2/reddit-scraper.git
 cd reddit-scraper
 pip install -r requirements.txt
-scrapling install      # downloads Chromium browser (~150MB, one-time, needed only for browser fallback)
+scrapling install   # downloads Chromium (~150MB, one-time — only needed for browser fallback)
 ```
 
 ---
 
-## Usage
+## Commands
 
-### List hot posts from a subreddit
+### `posts` — list subreddit posts
 
 ```bash
 python main.py posts --sub MMA --sort hot --limit 25
 ```
 
-Output:
+Posts are tagged with detected categories (e.g. `[NEWS/RESULT]`).
+
 ```
- #   Score   Cmts  Title
-------------------------------------------------------------------------------------------
- 1. [  1634] [ 264]  Firas Zahabi invites Khamzat Chimaev to train with him and George
+ 1. [  1649] [ 266]  Firas Zahabi invites Khamzat Chimaev to train...
        WinterStill4472 | 2026-05-13 | streamable.com
-       https://www.reddit.com/r/MMA/comments/1tc69wt/...
 
- 2. [  1502] [ 278]  Jon Jones submits Lyoto Machida with a standing guillotine
-       airplane231 | 2026-05-13 | imgur.com
-       https://www.reddit.com/r/MMA/comments/1tc3j00/...
+ 2. [   871] [ 189]  Sean Strickland reveals shoulder injury  [NEWS/RESULT]
+       Difficult-Tree2738 | 2026-05-13 | i.redd.it
 ```
-
-Saves `output/posts_MMA_<timestamp>.csv` and `.json`.
 
 ---
 
-### Extract comments from a single post (200+ comments)
+### `comments` — scrape a single post's comments
 
 ```bash
 python main.py comments \
-  --url "https://www.reddit.com/r/MMA/comments/1tc3j00/jon_jones_submits_lyoto_machida_with_a_standing/" \
-  --max-comments 500
+  --url "https://www.reddit.com/r/MMA/comments/1tc3j00/..." \
+  --max-comments 250 \
+  --sentiment
 ```
 
-Output (indented thread view):
+With `--sentiment`, each comment shows its score and polarity:
+
 ```
-[u/Savage_Batmanuel  score:+591  2026-05-13]
+[u/Savage_Batmanuel  score:+591  2026-05-13  (+) +0.74]
   I forgot how good Lyoto was.
-  >> https://www.reddit.com/r/MMA/comments/1tc3j00/comment/ollb90u/
 
-  [u/NukeTheWhales85  score:+184  2026-05-13]
-    He really was fascinating to watch in his early years. Doing something
-    very different and making it work consistently against top opposition.
-    >> https://www.reddit.com/r/MMA/comments/1tc3j00/comment/oln71r8/
+  [u/NukeTheWhales85  score:+184  2026-05-13  (+) +0.51]
+    He really was fascinating to watch in his early years...
 
-    [u/catnipformysoul  score:+73  2026-05-13]
-      "The Machida Era"
-      >> https://www.reddit.com/r/MMA/comments/1tc3j00/comment/oln8kov/
+THREAD SENTIMENT: POSITIVE  avg=+0.082  (pos=24 neg=12 neu=4)
+
+NOTABLE COMMENTS (8 found):
+  [RESULT] u/chemo92 +256: Turn up the volume, you can hear Machida wheezing...
+  [HYPE]   u/PinkSkies87 +38: This is such an iconic Rogan call...
 ```
-
-For a post with 278 comments this returns 255 comments (the API skips deleted/removed entries).
 
 ---
 
-### Scrape everything at once (posts + comments)
+### `scrape` — posts + comments in one shot
 
 ```bash
-python main.py scrape \
-  --sub MMA \
-  --sort hot \
-  --limit 10 \
-  --max-comments 200
+# Single subreddit
+python main.py scrape --sub MMA --sort hot --limit 10 --max-comments 200 --sentiment
+
+# Multiple subreddits
+python main.py scrape --subreddits MMA ufc boxing bjj --sort hot --limit 5 --max-comments 100
+
+# With Claude AI analysis (requires ANTHROPIC_API_KEY)
+python main.py scrape --sub MMA --limit 5 --analyze --api-key sk-ant-...
 ```
 
-Iterates over the top N posts, fetches their full comment threads, prints everything, and saves:
-- `output/posts_<sub>_<ts>.csv`
-- `output/comments_<post_id>_<ts>.csv` (one per post)
-- `output/full_<sub>_<ts>.json` (everything in one file)
+Saves per-post comment CSVs + one merged JSON:
+- `output/posts_MMA_<ts>.csv`
+- `output/comments_<post_id>_<ts>.csv` — one per post, with optional `sentiment` columns
+- `output/full_MMA_<ts>.json` — everything nested
 
 ---
 
-### Scrape multiple subreddits at once
+### `news` — breaking news, leaks, and results only
 
 ```bash
-python main.py scrape \
+python main.py news \
   --subreddits MMA ufc boxing \
-  --sort hot \
-  --limit 5 \
-  --max-comments 100
+  --sort new \
+  --limit 50 \
+  --categories news leak result
 ```
 
-Scrapes each subreddit in sequence and merges all results into `output/full_MMA_ufc_boxing_<ts>.json`. Per-subreddit CSV files are saved individually.
+Scans 50 recent posts per subreddit and shows only those matching combat sports news keywords. Supports `--comments` to also fetch notable comments for each matched post.
+
+```
+r/MMA: 15/50 posts matched
+r/ufc: 10/50 posts matched
+
+ 3. [  35] [  2]  Exclusive: PFL Africa Champion Abraham Bably to Face...  [NEWS/RESULT/LEAK]
+ 5. [ 871] [189]  Sean Strickland reveals shoulder injuries before fight  [RESULT]
+14. [ 981] [533]  Khamzat Chimaev's brother says his body "shut down"    [NEWS]
+```
+
+---
+
+### `analyze` — Claude AI analysis on saved data
+
+```bash
+# Set your key (one-time)
+set ANTHROPIC_API_KEY=sk-ant-...
+
+# Analyze a previously saved full_*.json file
+python main.py analyze --file output/full_MMA_20260514.json --limit 5
+```
+
+Output:
+
+```
+======================================================================
+  CLAUDE ANALYSIS: Khamzat Chimaev's brother says body "shut down"
+======================================================================
+
+SUMMARY
+  The community is reacting to news that Khamzat Chimaev suffered a
+  severe health episode during training, raising questions about his
+  long-term career prospects and future title shot timeline.
+
+SENTIMENT: NEGATIVE
+  The community expresses concern and disappointment over Khamzat's
+  health, mixed with skepticism about whether this affects his UFC plans.
+
+[BREAKING NEWS] Khamzat Chimaev suffered a serious physical health
+episode during training camp, according to his brother.
+
+FIGHTERS MENTIONED: Khamzat Chimaev, Sean Strickland, Dricus du Plessis
+
+KEY TOPICS:
+  - Fighter health and safety
+  - Title shot implications
+  - UFC matchmaking speculation
+  - Khamzat's training intensity
+
+NOTABLE QUOTES:
+  "You can't fake that kind of shutdown. Hope he recovers fully."
+  "This is why I've always said the UFC pushes fighters too hard."
+```
 
 ---
 
 ## CLI reference
 
 ```
-usage: main.py [-h] [--output OUTPUT] {posts,comments,scrape} ...
+usage: main.py [-h] [--output OUTPUT] {posts,comments,scrape,news,analyze} ...
 
 subcommands:
   posts      List posts from a subreddit
   comments   Scrape comments from a single post URL
-  scrape     Scrape posts + their comments in one pass
+  scrape     Scrape posts + comments (one or more subreddits)
+  news       Show only breaking news, leaks, results, and hype posts
+  analyze    Run Claude AI analysis on a saved full_*.json file
 
 options:
   --output, -o   Output directory (default: output/)
 
 posts:
-  --sub          Subreddit name          (default: MMA)
-  --sort         hot|new|top|rising      (default: hot)
-  --limit        Max posts to fetch      (default: 25)
+  --sub          Subreddit              (default: MMA)
+  --sort         hot|new|top|rising     (default: hot)
+  --limit        Max posts              (default: 25)
+  --method       auto|api|browser       (default: auto)
 
 comments:
-  --url          Full Reddit post URL    (required)
-  --max-comments Max comments to fetch   (default: 500)
-  --depth        Max display depth       (default: 3)
-  --method       auto|api|browser        (default: auto)
+  --url          Full Reddit post URL   (required)
+  --max-comments Total comments         (default: 500, all depths)
+  --depth        Max display depth      (default: 3)
+  --sentiment    Add sentiment scores
+  --min-score    Min upvotes for notable detection (default: 5)
+  --method       auto|api|browser
 
 scrape:
-  --sub          Subreddit name          (default: MMA, ignored if --subreddits set)
-  --subreddits   One or more subreddits  (e.g. --subreddits MMA ufc boxing)
-  --sort         hot|new|top|rising      (default: hot)
-  --limit        Posts per subreddit     (default: 10)
-  --max-comments Comments per post       (default: 200)
-  --depth        Max display depth       (default: 3)
-  --method       auto|api|browser        (default: auto)
+  --sub          Subreddit              (default: MMA)
+  --subreddits   Multiple subs          (e.g. --subreddits MMA ufc boxing)
+  --sort         hot|new|top|rising     (default: hot)
+  --limit        Posts per subreddit    (default: 10)
+  --max-comments Total comments/post    (default: 200)
+  --depth        Max display depth      (default: 3)
+  --sentiment    Add sentiment scores
+  --analyze      Run Claude AI analysis (requires --api-key or ANTHROPIC_API_KEY)
+  --api-key      Anthropic API key
+  --model        Claude model           (default: claude-haiku-4-5-20251001)
+  --method       auto|api|browser
+
+news:
+  --sub          Subreddit              (default: MMA)
+  --subreddits   Multiple subs
+  --sort         hot|new|top|rising     (default: new)
+  --limit        Posts to scan          (default: 50)
+  --categories   news|result|leak|hype  (default: all)
+  --comments     Also fetch comments for matched posts
+  --comments-limit   Max posts to fetch comments for (default: 5)
+  --method       auto|api|browser
+
+analyze:
+  --file         Path to full_*.json file (required)
+  --limit        Max posts to analyze    (default: 10)
+  --api-key      Anthropic API key
+  --model        Claude model            (default: claude-haiku-4-5-20251001)
 ```
 
 ### `--method` options
 
 | value | behavior |
 |---|---|
-| `auto` | tries JSON API first; falls back to browser if API fails or returns 0 comments |
-| `api` | forces JSON API only (fastest, 200+ comments, no browser needed) |
-| `browser` | forces StealthyFetcher (renders the page, ~25 comments, slower) |
+| `auto` | JSON API first; browser fallback on failure |
+| `api` | JSON API only — fast, 1s/request, 250+ comments |
+| `browser` | StealthyFetcher — ~10s/request, ~25 results/page |
 
 ---
 
@@ -195,6 +269,9 @@ scrape:
 | created | 2026-05-13 |
 | body | I forgot how good Lyoto was. |
 | permalink | https://www.reddit.com/r/MMA/... |
+| sentiment | positive *(with --sentiment)* |
+| sentiment_compound | +0.735 *(with --sentiment)* |
+| sentiment_intensity | strong *(with --sentiment)* |
 
 ### full JSON structure
 
@@ -202,6 +279,8 @@ scrape:
 [
   {
     "post": { "id": "t3_1tc3j00", "title": "...", "score": 1502, ... },
+    "sentiment": { "avg_compound": 0.082, "label": "positive", "distribution": {...} },
+    "claude_analysis": { "summary": "...", "fighter_mentions": [...], ... },
     "comments": [
       {
         "id": "t1_ollb90u",
@@ -211,15 +290,7 @@ scrape:
         "body": "I forgot how good Lyoto was.",
         "created": "2026-05-13",
         "permalink": "...",
-        "replies": [
-          {
-            "id": "t1_oln71r8",
-            "author": "NukeTheWhales85",
-            "depth": 1,
-            "body": "He really was fascinating...",
-            "replies": [...]
-          }
-        ]
+        "replies": [...]
       }
     ]
   }
@@ -232,83 +303,76 @@ scrape:
 
 ```
 reddit-scraper/
-├── main.py                  # CLI entrypoint (argparse subcommands)
+├── main.py                  # CLI — posts / comments / scrape / news / analyze
 ├── requirements.txt
 ├── scraper/
-│   ├── __init__.py          # public API re-exports
-│   ├── fetcher.py           # StealthyFetcher wrapper with retry logic
-│   ├── reddit_api.py        # Reddit JSON API client (primary method)
-│   ├── posts.py             # subreddit listing scraper -> Post dataclass
-│   ├── comments.py          # comment thread scraper -> Comment tree (auto/api/browser)
-│   └── export.py            # JSON / CSV / console output
+│   ├── __init__.py          # public API exports
+│   ├── fetcher.py           # StealthyFetcher wrapper with retry (browser fallback)
+│   ├── reddit_api.py        # JSON API — posts + comments, HTML cleaning, pagination
+│   ├── posts.py             # get_posts() with auto/api/browser routing
+│   ├── comments.py          # get_comments() with auto/api/browser routing
+│   ├── sentiment.py         # VADER + fight-lexicon overrides, thread aggregation
+│   ├── news.py              # keyword classifier — news / result / leak / hype
+│   ├── analyzer.py          # Claude AI — post summarizer, fighter extractor
+│   └── export.py            # JSON / CSV / console output (with optional sentiment cols)
 └── output/                  # generated files (gitignored)
 ```
 
 ---
 
-## How the scraping works
+## How it works
 
-### Method 1: Reddit JSON API (default)
+### Posts and comments — JSON API
 
-Reddit exposes public JSON endpoints that require no authentication and return full comment trees. Any request with a standard browser `User-Agent` returns `200 OK`:
-
-```
-GET https://www.reddit.com/r/MMA/hot.json?limit=100
-GET https://www.reddit.com/r/MMA/comments/1tc3j00.json?limit=500&sort=top
-```
-
-The comments endpoint returns a two-element array: `[post_data, comment_tree]`. The comment tree is fully nested — each comment's `replies` field contains its child comments recursively. This gives 200+ comments per thread in a single request.
-
-```python
-data = fetch_json(url)
-post    = data[0]["data"]["children"][0]["data"]
-comments = data[1]["data"]["children"]  # recursively nested
-```
-
-### Method 2: StealthyFetcher browser (fallback)
-
-If the JSON API returns 403 or zero comments, the scraper falls back to launching a real Chromium instance via [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright). This renders the full page, giving ~25 comments per load.
+Reddit exposes unauthenticated JSON endpoints:
 
 ```
-JSON API  →  GET reddit.com/r/MMA/comments/xxx.json  →  200 OK, 200+ comments
-Browser   →  GET reddit.com/r/MMA/comments/xxx/      →  200 OK, ~25 comments (fallback)
+GET https://www.reddit.com/r/{sub}/hot.json?limit=100
+GET https://www.reddit.com/r/{sub}/comments/{id}.json?limit=500
+    User-Agent: Mozilla/5.0 Chrome/124...
 ```
 
-### Post extraction
+The post listing supports `after` cursor pagination for limits > 100. The comment endpoint returns the full nested tree in one request (~250 comments per post; skips deleted/removed entries).
 
-Reddit's new design uses Web Components. Each post is a `<shreddit-post>` custom element with all data stored as HTML attributes — no CSS parsing needed:
+### Sentiment — VADER + fight lexicon
 
-```html
-<shreddit-post
-  post-title="Jon Jones submits Lyoto Machida..."
-  score="1502"
-  comment-count="278"
-  author="airplane231"
-  permalink="/r/MMA/comments/1tc3j00/..."
-  created-timestamp="2026-05-13T..."
-  upvote-ratio="0.964"
-  domain="imgur.com"
-  post-type="link"
-/>
-```
+The [VADER](https://github.com/cjhutto/vaderSentiment) lexicon was built for social media but doesn't handle fight-community slang well ("savage", "nasty", "beast" score as negative). This scraper adds a custom lexicon layer with fight-appropriate scores:
 
-### Comment tree reconstruction
+| word | VADER default | overridden to |
+|---|---|---|
+| `goat` | neutral | +2.5 |
+| `savage`, `beast` | negative | +1.8–2.0 |
+| `nasty`, `filthy` | negative | +1.0 (fight context) |
+| `robbed` | neutral | −2.0 |
+| `boring` | negative | −2.0 |
+| `juicer`, `cheater` | neutral | −1.5–2.0 |
 
-The JSON API returns comments already nested. Each comment's `replies.data.children` contains child `Comment` objects. The scraper recurses this structure to build the same `Comment` tree used by the browser path.
+Per-comment scores range from −1.0 (very negative) to +1.0 (very positive). Thread-level analysis aggregates all comments and returns a distribution + average compound score.
 
-When using the browser fallback, all `<shreddit-comment>` elements are collected flat and rebuilt into a tree using each element's `depth` attribute:
+### News / leak detection
 
-```python
-stack = []
-for comment in flat_comments:
-    while stack and stack[-1].depth >= comment.depth:
-        stack.pop()
-    if stack:
-        stack[-1].replies.append(comment)
-    else:
-        roots.append(comment)
-    stack.append(comment)
-```
+A regex classifier runs against post titles and comment bodies, tagging content into:
+
+- **`news`** — breaking, announced, report, confirmed, injury, retirement, drug test, suspension...
+- **`result`** — KO, TKO, submission, decision, champion, title shot, belt, stoppage...
+- **`leak`** — leaked, exclusive, source says, reportedly, insider, rumored...
+- **`hype`** — GOAT, fight of the year, legendary, iconic, greatest ever...
+
+### Claude AI analysis
+
+When `--analyze` is set, each post's top 80 comments are serialized into a structured prompt sent to Claude. The response is parsed into:
+- Summary of the discussion
+- Overall community sentiment + reasoning
+- Fighter names mentioned
+- Key topics (judging, PEDs, technique, matchmaking...)
+- Notable quotes verbatim
+- Breaking news flag + one-line summary
+
+Uses `claude-haiku` by default (fast, cheap). Switch to `claude-sonnet-4-6` for deeper analysis.
+
+### Browser fallback
+
+When the JSON API is blocked (403) or `method="browser"` is set, the scraper launches a real Chromium instance via [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) with patched fingerprints to bypass Reddit's anti-bot detection.
 
 ---
 
@@ -316,23 +380,15 @@ for comment in flat_comments:
 
 | subreddit | content |
 |---|---|
-| r/MMA | General MMA, UFC, Bellator, ONE |
-| r/ufc | UFC-specific discussion |
-| r/boxing | Professional boxing |
-| r/bjj | Brazilian Jiu-Jitsu |
+| r/MMA | General MMA — UFC, Bellator, ONE, PFL |
+| r/ufc | UFC-specific discussion and results |
+| r/boxing | Professional boxing — all promotions |
+| r/bjj | Brazilian Jiu-Jitsu technique and competition |
 | r/wrestling | Amateur and pro wrestling |
-| r/kickboxing | Kickboxing / K-1 / Glory |
+| r/kickboxing | Kickboxing — K-1, Glory, ONE |
 | r/WMMA | Women's MMA |
-| r/fightporn | Real street/amateur fights |
-| r/mmamemes | Fight memes and reactions |
-
----
-
-## Notes
-
-- **Rate**: the JSON API path is fast (~1–2 seconds per thread). The browser fallback takes ~5–8 seconds per page.
-- **No login**: scraping is done as an anonymous visitor. NSFW subreddits require login.
-- **"load more" stubs**: Reddit's JSON API occasionally returns `"more"` stubs for very large threads (1000+ comments). These are skipped; the first 500 comments are always fetched.
+| r/mmamemes | Post-event reactions and memes |
+| r/fightporn | Amateur and street fight videos |
 
 ---
 

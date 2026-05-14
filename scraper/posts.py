@@ -1,8 +1,11 @@
 """
-Post listing scraper — returns hot/new/top posts from a subreddit.
+Post listing — returns hot/new/top/rising posts from a subreddit.
+method="auto"    tries JSON API first, falls back to browser
+method="api"     JSON API only (fast, supports >100 posts via pagination)
+method="browser" StealthyFetcher only (capped at ~27 posts per page)
 """
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from .fetcher import fetch_page, REDDIT_BASE
 
 log = logging.getLogger(__name__)
@@ -26,16 +29,12 @@ class Post:
     subreddit: str
 
 
-def get_posts(subreddit: str, sort: str = "hot", limit: int = 25) -> list[Post]:
-    if sort not in SORT_OPTIONS:
-        raise ValueError(f"sort must be one of {SORT_OPTIONS}")
-
+def _get_posts_browser(subreddit: str, sort: str, limit: int) -> list[Post]:
     url = f"{REDDIT_BASE}/r/{subreddit}/{sort}/"
-    log.info("Fetching r/%s (%s) ...", subreddit, sort)
+    log.info("Browser posts: r/%s (%s)", subreddit, sort)
     page = fetch_page(url)
-
     elements = page.css("shreddit-post")
-    log.info("Found %d posts", len(elements))
+    log.info("Browser posts: found %d elements", len(elements))
 
     posts: list[Post] = []
     for el in elements[:limit]:
@@ -59,3 +58,31 @@ def get_posts(subreddit: str, sort: str = "hot", limit: int = 25) -> list[Post]:
             log.warning("Skipped post: %s", exc)
 
     return posts
+
+
+def get_posts(
+    subreddit: str,
+    sort: str = "hot",
+    limit: int = 25,
+    method: str = "auto",
+) -> list[Post]:
+    if sort not in SORT_OPTIONS:
+        raise ValueError(f"sort must be one of {SORT_OPTIONS}")
+    if method not in ("auto", "api", "browser"):
+        raise ValueError(f"method must be 'auto', 'api', or 'browser'")
+
+    if method == "browser":
+        return _get_posts_browser(subreddit, sort, limit)
+
+    try:
+        from .reddit_api import get_posts_api
+        posts = get_posts_api(subreddit, sort=sort, limit=limit)
+        if posts:
+            return posts
+        log.warning("API returned 0 posts, falling back to browser")
+    except Exception as exc:
+        if method == "api":
+            raise
+        log.warning("API failed (%s), falling back to browser", exc)
+
+    return _get_posts_browser(subreddit, sort, limit)
