@@ -1,19 +1,22 @@
 """
 Gaussian click bot using Playwright.
 
-Simulates human-like mouse behavior:
-- Bezier curve mouse trajectories with Gaussian noise
-- Gaussian click position offset from element center
-- Gaussian typing speed (inter-keystroke delay)
-- Gaussian scroll behavior
-- Gaussian delays between actions
+Mouse movement algorithm:
+  1. Random triangle waypoints — the path deviates through 0-2 triangle
+     vertices scattered perpendicularly off the direct line A→B.
+     Each vertex is placed at a Gaussian perpendicular offset from the
+     straight-line midpoint, creating organic curved detours.
+  2. Per-segment Bezier curves — each A→waypoint→B segment is a cubic
+     Bezier with Gaussian-jittered control points.
+  3. Per-step Gaussian noise — small wobble (±1.5 px) added at every step.
+  4. Ease-in-out speed — sine curve on step timing, slower at start/end.
 
 Usage:
   pip install playwright
   playwright install chromium
 
-  python sim/bot/playwright_agent.py --mode headless --posts 10
-  python sim/bot/playwright_agent.py --mode visible  --posts 5   # watch the mouse move
+  python sim/bot/playwright_agent.py --mode visible  --posts 5   # watch it move
+  python sim/bot/playwright_agent.py --mode headless --posts 20
 """
 import argparse
 import math
@@ -39,66 +42,129 @@ def gaussian_delay(mu=2.5, sigma=0.9, lo=0.5) -> float:
     return g(mu, sigma, lo=lo)
 
 
-# ── Bezier mouse trajectory ────────────────────────────────────────────────────
+# ── Triangle waypoints ─────────────────────────────────────────────────────────
+
+def _triangle_waypoints(
+    x0: float, y0: float,
+    x1: float, y1: float,
+    n: int | None = None,
+) -> list[tuple[float, float]]:
+    """
+    Generate intermediate waypoints that form triangular detours.
+
+    For each triangle, a vertex is placed at a random position along the
+    direct line A→B, then displaced perpendicularly by a Gaussian amount.
+    The displacement magnitude scales with distance so short moves get
+    small detours and long moves can swing wider.
+
+              vertex (triangle peak)
+               *
+              / \\
+             /   \\
+    A ──────*─────*────── B
+          t=0.3  t=0.7
+
+    Returns ordered list: [A, v1, v2, ..., B]
+    """
+    if n is None:
+        dist = math.hypot(x1 - x0, y1 - y0)
+        # Short moves: 0-1 detours. Long moves: 1-2.
+        n = random.choices([0, 1, 2], weights=[0.2, 0.5, 0.3])[0] if dist > 80 else random.choices([0, 1], weights=[0.5, 0.5])[0]
+
+    waypoints: list[tuple[float, float]] = [(x0, y0)]
+    dx = x1 - x0
+    dy = y1 - y0
+    dist = math.hypot(dx, dy) or 1.0
+
+    # Unit perpendicular vector (rotated 90°)
+    px = -dy / dist
+    py =  dx / dist
+
+    # Spread triangles along the path avoiding start/end
+    slots = sorted(random.uniform(0.2, 0.8) for _ in range(n))
+
+    for t in slots:
+        # Point on direct line at parameter t
+        mx = x0 + dx * t
+        my = y0 + dy * t
+
+        # Gaussian perpendicular offset — sigma ~15% of distance, random sign
+        sigma   = dist * g(0.15, 0.05, lo=0.05, hi=0.35)
+        offset  = random.gauss(0, sigma)
+        vx = mx + px * offset
+        vy = my + py * offset
+        waypoints.append((vx, vy))
+
+    waypoints.append((x1, y1))
+    return waypoints
+
+
+# ── Bezier segment ─────────────────────────────────────────────────────────────
 
 def _bezier(t: float, pts: list[tuple[float, float]]) -> tuple[float, float]:
-    """De Casteljau's algorithm for a Bezier curve at parameter t."""
     p = list(pts)
     while len(p) > 1:
-        p = [
-            (p[i][0] * (1 - t) + p[i+1][0] * t,
-             p[i][1] * (1 - t) + p[i+1][1] * t)
-            for i in range(len(p) - 1)
-        ]
+        p = [(p[i][0]*(1-t) + p[i+1][0]*t,
+              p[i][1]*(1-t) + p[i+1][1]*t) for i in range(len(p)-1)]
     return p[0]
 
 
-def _control_points(
+def _move_segment(
+    page: Page,
     x0: float, y0: float,
     x1: float, y1: float,
-    n_control: int = 2,
-    jitter_sigma: float = 80,
-) -> list[tuple[float, float]]:
-    """Generate intermediate control points with Gaussian jitter."""
-    pts = [(x0, y0)]
-    for i in range(1, n_control + 1):
-        t   = i / (n_control + 1)
-        mx  = x0 + (x1 - x0) * t + g(0, jitter_sigma)
-        my  = y0 + (y1 - y0) * t + g(0, jitter_sigma)
-        pts.append((mx, my))
-    pts.append((x1, y1))
-    return pts
+) -> None:
+    """Move along one segment using a cubic Bezier + per-step Gaussian noise."""
+    dist  = math.hypot(x1 - x0, y1 - y0)
+    steps = max(12, int(dist / 6))
+
+    # Cubic Bezier: two Gaussian-jittered control points
+    jitter = max(10.0, dist * 0.2)
+    t1 = g(0.30, 0.08, lo=0.15, hi=0.45)
+    t2 = g(0.70, 0.08, lo=0.55, hi=0.85)
+    ctrl = [
+        (x0, y0),
+        (x0 + (x1-x0)*t1 + g(0, jitter), y0 + (y1-y0)*t1 + g(0, jitter)),
+        (x0 + (x1-x0)*t2 + g(0, jitter), y0 + (y1-y0)*t2 + g(0, jitter)),
+        (x1, y1),
+    ]
+
+    for i in range(steps + 1):
+        t       = i / steps
+        bx, by  = _bezier(t, ctrl)
+        # Small per-step Gaussian wobble
+        bx += g(0, 1.2)
+        by += g(0, 1.2)
+        page.mouse.move(bx, by)
+
+        # Ease-in-out: slow at start and end of each segment
+        speed      = 0.5 + 0.5 * math.sin(math.pi * t)
+        step_delay = g(0.004, 0.0015, lo=0.001) / (speed + 0.1)
+        time.sleep(step_delay)
 
 
-def move_mouse(page: Page, x: float, y: float, steps: int | None = None) -> None:
+# ── Public move_mouse ──────────────────────────────────────────────────────────
+
+def move_mouse(page: Page, x: float, y: float) -> None:
     """
-    Move mouse from current position to (x, y) along a Bezier curve
-    with Gaussian noise on the trajectory and varying step speed.
-    """
-    if steps is None:
-        # More steps for longer distances
-        cur = page.evaluate("() => ({x: window.mouseX || 0, y: window.mouseY || 0})")
-        dist = math.hypot(x - cur.get("x", 0), y - cur.get("y", 0))
-        steps = max(20, int(dist / 8))
+    Move from current tracked position to (x, y).
 
+    Path = random triangle waypoints  ×  per-segment Bezier  ×  Gaussian noise.
+    """
     cur_x = page.evaluate("() => window._mx || 400")
     cur_y = page.evaluate("() => window._my || 300")
 
-    ctrl = _control_points(cur_x, cur_y, x, y, n_control=random.randint(1, 3))
+    waypoints = _triangle_waypoints(cur_x, cur_y, x, y)
 
-    for i in range(steps + 1):
-        t  = i / steps
-        px, py = _bezier(t, ctrl)
-        # Add per-step Gaussian noise (small wobble)
-        px += g(0, 1.5)
-        py += g(0, 1.5)
-        page.mouse.move(px, py)
-        # Variable speed: slower at start and end (ease-in-out feel)
-        speed = 0.5 + 0.5 * math.sin(math.pi * t)
-        step_delay = g(0.003, 0.001, lo=0.001) / (speed + 0.1)
-        time.sleep(step_delay)
+    for i in range(len(waypoints) - 1):
+        ax, ay = waypoints[i]
+        bx, by = waypoints[i + 1]
+        _move_segment(page, ax, ay, bx, by)
 
-    # Store last position for next move
+        # Tiny pause at each triangle vertex (human micro-correction)
+        if i < len(waypoints) - 2:
+            time.sleep(g(0.04, 0.02, lo=0.01))
+
     page.evaluate(f"() => {{ window._mx = {x}; window._my = {y}; }}")
 
 
