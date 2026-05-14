@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+sim/bot/proxies.txt
 *.egg-info/
 dist/
 .venv/
