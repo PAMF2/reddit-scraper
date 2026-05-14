@@ -46,7 +46,7 @@ def _get_posts_browser(subreddit: str, sort: str, limit: int) -> list[Post]:
                 author=a.get("author", ""),
                 score=int(a.get("score", 0)),
                 comment_count=int(a.get("comment-count", 0)),
-                domain=a.get("domain", ""),
+                domain=("self" if (a.get("domain", "") or "").startswith("self.") else a.get("domain", "")),
                 permalink=REDDIT_BASE + a.get("permalink", ""),
                 content_href=a.get("content-href", ""),
                 post_type=a.get("post-type", ""),

@@ -1,3 +1,4 @@
 scrapling[fetchers]
 vaderSentiment
 anthropic
+rich

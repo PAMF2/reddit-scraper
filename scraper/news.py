@@ -77,10 +77,16 @@ class NewsTag:
         return cats
 
 
+_OFFICIAL_THREAD = re.compile(r"^\[OFFICIAL\]", re.IGNORECASE)
+
+
 def tag_text(text: str) -> NewsTag:
     """Return a NewsTag describing what kind of notable content this text contains."""
     tag = NewsTag()
     if not text:
+        return tag
+
+    if _OFFICIAL_THREAD.match(text):
         return tag
 
     for m in _NEWS_KEYWORDS.finditer(text):

@@ -25,7 +25,7 @@ from datetime import datetime
 import scraper
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="[%(asctime)s] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
@@ -54,18 +54,11 @@ def cmd_comments(args):
 
     if args.sentiment:
         agg = scraper.analyze_thread(comments)
-        print(f"\nTHREAD SENTIMENT: {agg['label'].upper()}  "
-              f"avg={agg['avg_compound']:+.3f}  "
-              f"(pos={agg['distribution']['positive']} "
-              f"neg={agg['distribution']['negative']} "
-              f"neu={agg['distribution']['neutral']})")
+        scraper.print_thread_sentiment(agg)
 
     notable = scraper.find_notable_comments(comments, min_score=args.min_score)
     if notable:
-        print(f"\nNOTABLE COMMENTS ({len(notable)} found):")
-        for n in notable[:5]:
-            cats = "/".join(n["categories"]).upper()
-            print(f"  [{cats}] u/{n['author']} +{n['score']}: {n['body'][:100]}")
+        scraper.print_notable(notable)
 
     if args.output:
         out = Path(args.output)
@@ -84,15 +77,14 @@ def cmd_comments(args):
 # ── scrape ────────────────────────────────────────────────────────────────────
 
 def _scrape_sub(sub: str, args, out: Path | None, all_data: list) -> None:
+    from scraper.display import console
     posts = scraper.get_posts(sub, sort=args.sort, limit=args.limit, method=args.method)
     scraper.print_posts(posts, show_tags=True)
     if out:
         scraper.save_posts_csv(posts, out / f"posts_{sub}_{TIMESTAMP}.csv")
 
     for i, post in enumerate(posts, 1):
-        print(f"\n{'='*70}")
-        print(f"[{i}/{len(posts)}] r/{sub} -- {post.title}")
-        print(f"{'='*70}")
+        console.rule(f"[{i}/{len(posts)}] r/{sub} — {post.title[:60]}")
         try:
             comments = scraper.get_comments(
                 post.permalink,
@@ -100,22 +92,18 @@ def _scrape_sub(sub: str, args, out: Path | None, all_data: list) -> None:
                 method=args.method,
             )
         except Exception as exc:
-            print(f"  ERROR: {exc}")
+            console.print(f"  [red]ERROR:[/red] {exc}")
             continue
 
         scraper.print_comments(comments, max_depth=args.depth, with_sentiment=args.sentiment)
 
         if args.sentiment:
             agg = scraper.analyze_thread(comments)
-            print(f"\n  SENTIMENT: {agg['label'].upper()}  avg={agg['avg_compound']:+.3f}  "
-                  f"(+{agg['distribution']['positive']} "
-                  f"-{agg['distribution']['negative']} "
-                  f"~{agg['distribution']['neutral']})")
+            scraper.print_thread_sentiment(agg)
 
         notable = scraper.find_notable_comments(comments, min_score=5)
         if notable:
-            print(f"\n  NOTABLE ({len(notable)}): ", end="")
-            print(" | ".join(f"[{'/'.join(n['categories']).upper()}] {n['body'][:50]}" for n in notable[:3]))
+            scraper.print_notable(notable[:3])
 
         entry: dict = {
             "post": post.__dict__,
@@ -135,7 +123,7 @@ def _scrape_sub(sub: str, args, out: Path | None, all_data: list) -> None:
                 print_analysis(analysis)
                 entry["claude_analysis"] = analysis.raw
             except Exception as exc:
-                print(f"  [Claude] ERROR: {exc}")
+                console.print(f"  [red][Claude] ERROR:[/red] {exc}")
 
         all_data.append(entry)
 
@@ -150,58 +138,58 @@ def _scrape_sub(sub: str, args, out: Path | None, all_data: list) -> None:
 
 
 def cmd_scrape(args):
+    from scraper.display import console
     subreddits = args.subreddits if args.subreddits else [args.sub]
     out = Path(args.output) if args.output else None
     all_data: list = []
 
     for sub in subreddits:
-        print(f"\n{'#'*70}")
-        print(f"  Subreddit: r/{sub}")
-        print(f"{'#'*70}")
+        console.rule(f"[bold]r/{sub}[/bold]", style="bright_blue")
         _scrape_sub(sub, args, out, all_data)
 
     if out:
         label = "_".join(subreddits)
         scraper.save_json(all_data, out / f"full_{label}_{TIMESTAMP}.json")
-        print(f"\n[done] All data saved to {out}/")
+        console.print("\n  [dim]All data saved to[/dim] " + str(out) + "/")
 
 
 # ── news ──────────────────────────────────────────────────────────────────────
 
 def cmd_news(args):
-    """Fetch posts and filter to only breaking news, leaks, results, and hype."""
+    from scraper.display import console, print_news_header
     subreddits = args.subreddits if args.subreddits else [args.sub]
     categories = args.categories if args.categories else None
+
+    print_news_header(subreddits, args.sort)
 
     all_news = []
     for sub in subreddits:
         posts = scraper.get_posts(sub, sort=args.sort, limit=args.limit, method=args.method)
         filtered = scraper.filter_news_posts(posts, categories=categories)
         all_news.extend(filtered)
-        print(f"\nr/{sub}: {len(filtered)}/{len(posts)} posts matched")
+        console.print(f"[dim]r/{sub}: {len(filtered)}/{len(posts)} posts matched[/dim]")
 
     if not all_news:
-        print("\nNo news/leaks/results found with current filters.")
+        console.print("\n[dim]No news/leaks/results found with current filters.[/dim]")
         return
 
-    scraper.print_posts(all_news, show_tags=True)
+    console.print()
+    for post in all_news:
+        tag = scraper.tag_text(post.title)
+        scraper.print_news_post(post, tag)
 
     if args.comments:
         for post in all_news[:args.comments_limit]:
-            print(f"\n{'='*70}")
-            print(f"COMMENTS: {post.title}")
-            print(f"{'='*70}")
+            console.rule(f"COMMENTS: {post.title[:60]}")
             try:
                 comments = scraper.get_comments(post.permalink, max_comments=50, method=args.method)
                 notable = scraper.find_notable_comments(comments, min_score=3)
                 if notable:
-                    for n in notable:
-                        cats = "/".join(n["categories"]).upper()
-                        print(f"  [{cats:15}] u/{n['author']:20} +{n['score']:4}: {n['body'][:100]}")
+                    scraper.print_notable(notable)
                 else:
                     scraper.print_comments(comments, max_depth=1)
             except Exception as exc:
-                print(f"  ERROR: {exc}")
+                console.print(f"  [red]ERROR:[/red] {exc}")
 
     if args.output:
         out = Path(args.output)
@@ -210,13 +198,11 @@ def cmd_news(args):
             [p.__dict__ for p in all_news],
             out / f"news_{'_'.join(subreddits)}_{TIMESTAMP}.json",
         )
-        print(f"\n[done] Saved to {out}/")
 
 
 # ── analyze ───────────────────────────────────────────────────────────────────
 
 def cmd_analyze(args):
-    """Run Claude AI analysis on an existing full_*.json output file."""
     import json
     from scraper.analyzer import analyze_post, print_analysis
 
@@ -238,7 +224,6 @@ def cmd_analyze(args):
     results = []
     for entry in data[:args.limit]:
         p = entry.get("post", {})
-        # Re-hydrate comments from dict
         from scraper.comments import Comment
 
         def _from_dict(d: dict) -> Comment:
@@ -279,6 +264,7 @@ def cmd_analyze(args):
 def build_parser():
     p = argparse.ArgumentParser(prog="reddit-scraper", description="Reddit fight/combat scraper")
     p.add_argument("--output", "-o", default="output")
+    p.add_argument("--verbose", "-v", action="store_true", help="Enable INFO-level logging")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     # posts
@@ -337,6 +323,10 @@ def build_parser():
 if __name__ == "__main__":
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.INFO)
+
     dispatch = {
         "posts": cmd_posts,
         "comments": cmd_comments,

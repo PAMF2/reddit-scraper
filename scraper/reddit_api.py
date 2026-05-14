@@ -49,13 +49,11 @@ def _get(url: str, retries: int = 3, wait: float = 2.0) -> dict | list:
 
 
 def _clean_body(text: str) -> str:
-    """Normalize Reddit markdown body text to a clean single-line string."""
     text = unescape(text.strip())
-    # strip markdown blockquote markers Reddit inserts in quoted replies
     text = re.sub(r"^&gt;[^\n]*\n?", "", text, flags=re.MULTILINE)
-    # collapse all newlines to a single space — avoids multiline CSV cells
     text = re.sub(r"\n+", " ", text)
     text = re.sub(r" {2,}", " ", text)
+    text = text.replace("�", "'")
     return text.strip()
 
 
@@ -97,11 +95,11 @@ def get_posts_api(subreddit: str, sort: str = "hot", limit: int = 25) -> list[Po
             try:
                 posts.append(Post(
                     id=p.get("name", ""),
-                    title=unescape(p.get("title", "")).strip(),
+                    title=unescape(p.get("title", "")).strip().replace("�", "'"),
                     author=p.get("author", "[deleted]"),
                     score=int(p.get("score", 0)),
                     comment_count=int(p.get("num_comments", 0)),
-                    domain=p.get("domain", ""),
+                    domain=("self" if (p.get("domain", "") or "").startswith("self.") else p.get("domain", "")),
                     permalink=REDDIT_BASE + p.get("permalink", ""),
                     content_href=p.get("url", ""),
                     post_type="self" if p.get("is_self") else "link",
