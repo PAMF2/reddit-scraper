@@ -1,21 +1,23 @@
 # reddit-scraper
 
-A Python scraper for Reddit that extracts posts and threaded comments from any subreddit — built specifically for combat sports analysis (MMA, boxing, BJJ, etc.).
+A Python scraper for Reddit that extracts posts and full threaded comment trees from any subreddit — built specifically for combat sports analysis (MMA, boxing, BJJ, etc.).
 
-Uses [Scrapling](https://github.com/D4Vinci/Scrapling) with a stealth headless browser to bypass Reddit's bot protection and extract structured data without the official API.
+Uses Reddit's public JSON API as the primary method (fast, 200+ comments per thread) with a stealth headless browser ([Scrapling](https://github.com/D4Vinci/Scrapling)) as an automatic fallback.
 
 ---
 
 ## Why this exists
 
-Reddit's API became paid in 2023 and has strict rate limits. Plain HTTP requests to Reddit return `403 Forbidden`. This scraper uses a stealth Chromium browser that mimics real user behaviour, bypassing Reddit's anti-bot layer and returning `200 OK` consistently.
+Reddit's API became paid in 2023 and has strict rate limits for registered apps. Plain HTTP requests to Reddit's HTML return `403 Forbidden`. This scraper uses Reddit's undocumented public JSON endpoints — which return full comment trees — and falls back to a stealth Chromium browser when the JSON API is unavailable.
 
 ---
 
 ## What it does
 
-- **Posts**: scrapes listing pages (hot/new/top/rising) and extracts title, score, comment count, author, domain, permalink, upvote ratio, and timestamp — all from `<shreddit-post>` element attributes
-- **Comments**: navigates to each post, extracts every comment with its body text, author, score, depth, and permalink — then reconstructs the full nested thread tree
+- **Posts**: fetches listing pages (hot/new/top/rising) and extracts title, score, comment count, author, domain, permalink, upvote ratio, and timestamp
+- **Comments**: fetches the full comment thread (200+ comments) via the JSON API and reconstructs the nested reply tree recursively
+- **Multi-subreddit**: scrape multiple subreddits in a single command and merge results into one output folder
+- **Auto-method**: tries the JSON API first (fast, full threads), falls back to the browser if blocked
 - **Export**: saves everything as JSON (nested tree) and CSV (flat with `parent_id` for relational joins)
 
 ---
@@ -28,7 +30,7 @@ Requires Python 3.10+.
 git clone https://github.com/PAMF2/reddit-scraper.git
 cd reddit-scraper
 pip install -r requirements.txt
-scrapling install      # downloads Chromium browser (~150MB, one-time)
+scrapling install      # downloads Chromium browser (~150MB, one-time, needed only for browser fallback)
 ```
 
 ---
@@ -58,13 +60,12 @@ Saves `output/posts_MMA_<timestamp>.csv` and `.json`.
 
 ---
 
-### Extract comments from a single post
+### Extract comments from a single post (200+ comments)
 
 ```bash
 python main.py comments \
   --url "https://www.reddit.com/r/MMA/comments/1tc3j00/jon_jones_submits_lyoto_machida_with_a_standing/" \
-  --max-comments 100 \
-  --depth 3
+  --max-comments 500
 ```
 
 Output (indented thread view):
@@ -83,7 +84,7 @@ Output (indented thread view):
       >> https://www.reddit.com/r/MMA/comments/1tc3j00/comment/oln8kov/
 ```
 
-Saves `output/comments_<slug>_<timestamp>.csv` and `.json`.
+For a post with 278 comments this returns 255 comments (the API skips deleted/removed entries).
 
 ---
 
@@ -94,14 +95,27 @@ python main.py scrape \
   --sub MMA \
   --sort hot \
   --limit 10 \
-  --max-comments 100 \
-  --depth 3
+  --max-comments 200
 ```
 
-Iterates over the top N posts, fetches their comments, prints everything, and saves:
+Iterates over the top N posts, fetches their full comment threads, prints everything, and saves:
 - `output/posts_<sub>_<ts>.csv`
 - `output/comments_<post_id>_<ts>.csv` (one per post)
 - `output/full_<sub>_<ts>.json` (everything in one file)
+
+---
+
+### Scrape multiple subreddits at once
+
+```bash
+python main.py scrape \
+  --subreddits MMA ufc boxing \
+  --sort hot \
+  --limit 5 \
+  --max-comments 100
+```
+
+Scrapes each subreddit in sequence and merges all results into `output/full_MMA_ufc_boxing_<ts>.json`. Per-subreddit CSV files are saved individually.
 
 ---
 
@@ -125,16 +139,27 @@ posts:
 
 comments:
   --url          Full Reddit post URL    (required)
-  --max-comments Max comments to fetch   (default: 100)
+  --max-comments Max comments to fetch   (default: 500)
   --depth        Max display depth       (default: 3)
+  --method       auto|api|browser        (default: auto)
 
 scrape:
-  --sub          Subreddit name          (default: MMA)
+  --sub          Subreddit name          (default: MMA, ignored if --subreddits set)
+  --subreddits   One or more subreddits  (e.g. --subreddits MMA ufc boxing)
   --sort         hot|new|top|rising      (default: hot)
-  --limit        Posts to scrape         (default: 10)
-  --max-comments Comments per post       (default: 50)
+  --limit        Posts per subreddit     (default: 10)
+  --max-comments Comments per post       (default: 200)
   --depth        Max display depth       (default: 3)
+  --method       auto|api|browser        (default: auto)
 ```
+
+### `--method` options
+
+| value | behavior |
+|---|---|
+| `auto` | tries JSON API first; falls back to browser if API fails or returns 0 comments |
+| `api` | forces JSON API only (fastest, 200+ comments, no browser needed) |
+| `browser` | forces StealthyFetcher (renders the page, ~25 comments, slower) |
 
 ---
 
@@ -212,8 +237,9 @@ reddit-scraper/
 ├── scraper/
 │   ├── __init__.py          # public API re-exports
 │   ├── fetcher.py           # StealthyFetcher wrapper with retry logic
+│   ├── reddit_api.py        # Reddit JSON API client (primary method)
 │   ├── posts.py             # subreddit listing scraper -> Post dataclass
-│   ├── comments.py          # comment thread scraper -> Comment tree
+│   ├── comments.py          # comment thread scraper -> Comment tree (auto/api/browser)
 │   └── export.py            # JSON / CSV / console output
 └── output/                  # generated files (gitignored)
 ```
@@ -222,13 +248,30 @@ reddit-scraper/
 
 ## How the scraping works
 
-### Why StealthyFetcher (not plain HTTP)
+### Method 1: Reddit JSON API (default)
 
-Reddit returns `403 Forbidden` to any request that doesn't look like a real browser. `StealthyFetcher` launches a real Chromium instance with patched fingerprints (via [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)) — this gets `200 OK` every time.
+Reddit exposes public JSON endpoints that require no authentication and return full comment trees. Any request with a standard browser `User-Agent` returns `200 OK`:
 
 ```
-Plain Fetcher  →  GET reddit.com  →  403 Forbidden
-StealthyFetcher →  GET reddit.com  →  200 OK ✓
+GET https://www.reddit.com/r/MMA/hot.json?limit=100
+GET https://www.reddit.com/r/MMA/comments/1tc3j00.json?limit=500&sort=top
+```
+
+The comments endpoint returns a two-element array: `[post_data, comment_tree]`. The comment tree is fully nested — each comment's `replies` field contains its child comments recursively. This gives 200+ comments per thread in a single request.
+
+```python
+data = fetch_json(url)
+post    = data[0]["data"]["children"][0]["data"]
+comments = data[1]["data"]["children"]  # recursively nested
+```
+
+### Method 2: StealthyFetcher browser (fallback)
+
+If the JSON API returns 403 or zero comments, the scraper falls back to launching a real Chromium instance via [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright). This renders the full page, giving ~25 comments per load.
+
+```
+JSON API  →  GET reddit.com/r/MMA/comments/xxx.json  →  200 OK, 200+ comments
+Browser   →  GET reddit.com/r/MMA/comments/xxx/      →  200 OK, ~25 comments (fallback)
 ```
 
 ### Post extraction
@@ -249,21 +292,11 @@ Reddit's new design uses Web Components. Each post is a `<shreddit-post>` custom
 />
 ```
 
-### Comment extraction — the nesting problem
+### Comment tree reconstruction
 
-Reddit renders all comments in a flat DOM sequence (not a true tree), and each `<shreddit-comment>` contains its children inside itself. A naive `p::text` selector on a parent comment returns ALL paragraph text from all descendant comments too.
+The JSON API returns comments already nested. Each comment's `replies.data.children` contains child `Comment` objects. The scraper recurses this structure to build the same `Comment` tree used by the browser path.
 
-**Solution**: each comment has a `thingid` attribute (e.g., `t1_ollb90u`). Reddit generates a unique `div` ID for each comment's body: `t1_ollb90u-comment-rtjson-content`. Selecting paragraphs inside that specific div returns only that comment's own text:
-
-```python
-thingid  = el.attrib.get("thingid")          # "t1_ollb90u"
-body_div = f"{thingid}-comment-rtjson-content"
-body     = el.css(f"#{body_div} p::text").getall()
-```
-
-### Thread tree reconstruction
-
-All `<shreddit-comment>` elements are collected flat, then rebuilt into a tree using each element's `depth` attribute (0 = top-level, 1 = reply, 2 = reply to reply, etc.):
+When using the browser fallback, all `<shreddit-comment>` elements are collected flat and rebuilt into a tree using each element's `depth` attribute:
 
 ```python
 stack = []
@@ -295,12 +328,11 @@ for comment in flat_comments:
 
 ---
 
-## Limitations
+## Notes
 
-- **Comments per page**: Reddit renders ~25 comments per page load. Increasing `--max-comments` beyond ~25 may not capture more without scroll/pagination (not yet implemented).
-- **Rate**: each page fetch takes ~5–8 seconds (real browser). Scraping 10 posts with 50 comments each takes roughly 2–3 minutes.
-- **Dynamic content**: comments loaded via "load more" buttons are not fetched in this version.
+- **Rate**: the JSON API path is fast (~1–2 seconds per thread). The browser fallback takes ~5–8 seconds per page.
 - **No login**: scraping is done as an anonymous visitor. NSFW subreddits require login.
+- **"load more" stubs**: Reddit's JSON API occasionally returns `"more"` stubs for very large threads (1000+ comments). These are skipped; the first 500 comments are always fetched.
 
 ---
 
