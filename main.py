@@ -7,6 +7,7 @@ Commands:
   scrape     Scrape posts + comments (one or multiple subreddits)
   news       Show only breaking news / leaks / results from a subreddit
   analyze    Run Claude AI analysis on a saved full_*.json file
+  stats      Statistical distributions + cross-analysis on a saved full_*.json file
 
 Examples:
   python main.py posts --sub MMA --sort hot --limit 25
@@ -15,6 +16,7 @@ Examples:
   python main.py scrape --subreddits MMA ufc boxing --limit 5 --analyze
   python main.py news --subreddits MMA ufc boxing --sort new --limit 50
   python main.py analyze --file output/full_MMA_20260514.json
+  python main.py stats --file output/full_MMA_20260514.json
 """
 import argparse
 import logging
@@ -259,6 +261,30 @@ def cmd_analyze(args):
         scraper.save_json(results, out / f"analysis_{path.stem}_{TIMESTAMP}.json")
 
 
+# ── stats ─────────────────────────────────────────────────────────────────────
+
+def cmd_stats(args):
+    import json
+    from scraper.stats import full_report, print_report
+
+    path = Path(args.file)
+    if not path.exists():
+        print(f"File not found: {path}")
+        return
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        print("Expected a list of {post, comments} objects (full_*.json).")
+        return
+
+    report = full_report(data)
+    print_report(report)
+
+    if args.output:
+        out = Path(args.output)
+        scraper.save_json(report, out / f"stats_{path.stem}_{TIMESTAMP}.json")
+
+
 # ── parser ────────────────────────────────────────────────────────────────────
 
 def build_parser():
@@ -317,6 +343,10 @@ def build_parser():
     ap.add_argument("--api-key", default=None, help="Anthropic API key (or set ANTHROPIC_API_KEY)")
     ap.add_argument("--model", default="claude-haiku-4-5-20251001")
 
+    # stats
+    stp = sub.add_parser("stats", help="Score/sentiment distributions + cross-analysis on a full_*.json file")
+    stp.add_argument("--file", required=True, help="Path to a full_*.json output file")
+
     return p
 
 
@@ -328,10 +358,11 @@ if __name__ == "__main__":
         logging.getLogger().setLevel(logging.INFO)
 
     dispatch = {
-        "posts": cmd_posts,
+        "posts":    cmd_posts,
         "comments": cmd_comments,
-        "scrape": cmd_scrape,
-        "news": cmd_news,
-        "analyze": cmd_analyze,
+        "scrape":   cmd_scrape,
+        "news":     cmd_news,
+        "analyze":  cmd_analyze,
+        "stats":    cmd_stats,
     }
     dispatch[args.cmd](args)

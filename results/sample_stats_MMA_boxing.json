@@ -1,0 +1,165 @@
+{
+  "posts": {
+    "count": 4,
+    "score": {
+      "n": 4,
+      "mean": 146.5,
+      "median": 132.0,
+      "stdev": 93.376,
+      "min": 64.0,
+      "p25": 72.25,
+      "p75": 206.25,
+      "p95": 247.65,
+      "max": 258.0
+    },
+    "upvote_ratio": {
+      "n": 4,
+      "mean": 0.919,
+      "median": 0.941,
+      "stdev": 0.085,
+      "min": 0.802,
+      "p25": 0.885,
+      "p75": 0.976,
+      "p95": 0.989,
+      "max": 0.992
+    },
+    "comment_count": {
+      "n": 4,
+      "mean": 74.0,
+      "median": 45.0,
+      "stdev": 83.929,
+      "min": 13.0,
+      "p25": 16.0,
+      "p75": 103.0,
+      "p95": 175.0,
+      "max": 193.0
+    }
+  },
+  "comments": {
+    "count": 253,
+    "sentiment_compound": {
+      "n": 253,
+      "mean": 0.097,
+      "median": 0.0,
+      "stdev": 0.476,
+      "min": -0.934,
+      "p25": -0.253,
+      "p75": 0.459,
+      "p95": 0.871,
+      "max": 0.982
+    },
+    "sentiment_dist": {
+      "positive": 116,
+      "negative": 75,
+      "neutral": 62
+    },
+    "score": {
+      "n": 253,
+      "mean": 10.96,
+      "median": 1.0,
+      "stdev": 38.437,
+      "min": -11.0,
+      "p25": 1.0,
+      "p75": 5.0,
+      "p95": 44.4,
+      "max": 394.0
+    },
+    "depth": {
+      "n": 253,
+      "mean": 1.13,
+      "median": 1,
+      "stdev": 1.358,
+      "min": 0,
+      "p25": 0.0,
+      "p75": 2.0,
+      "p95": 3.4,
+      "max": 8
+    }
+  },
+  "cross": {
+    "score_tier_sentiment": {
+      "0-100": {
+        "avg_compound": 0.066,
+        "n": 84
+      },
+      "101-500": {
+        "avg_compound": 0.112,
+        "n": 169
+      }
+    },
+    "depth_sentiment": {
+      "depth_0": {
+        "avg_compound": 0.069,
+        "n": 107
+      },
+      "depth_1": {
+        "avg_compound": 0.063,
+        "n": 65
+      },
+      "depth_2": {
+        "avg_compound": 0.107,
+        "n": 48
+      },
+      "depth_3": {
+        "avg_compound": 0.086,
+        "n": 20
+      },
+      "depth_4": {
+        "avg_compound": 0.47,
+        "n": 13
+      }
+    },
+    "upvote_ratio_sentiment": {
+      "75-89%": {
+        "avg_compound": 0.105,
+        "n": 153
+      },
+      "≥90%": {
+        "avg_compound": 0.084,
+        "n": 100
+      }
+    },
+    "top_authors": [
+      {
+        "author": "Davemeddlehed",
+        "comments": 6
+      },
+      {
+        "author": "Maxiuss456",
+        "comments": 5
+      },
+      {
+        "author": "Heebmeister",
+        "comments": 5
+      },
+      {
+        "author": "PTMorte",
+        "comments": 4
+      },
+      {
+        "author": "Francis_Nugaton",
+        "comments": 4
+      },
+      {
+        "author": "broncosandwrestling",
+        "comments": 3
+      },
+      {
+        "author": "CARL__CARMONI",
+        "comments": 3
+      },
+      {
+        "author": "tagillaslover",
+        "comments": 3
+      },
+      {
+        "author": "Few_Doubt6901",
+        "comments": 3
+      },
+      {
+        "author": "Ibobalboa",
+        "comments": 3
+      }
+    ]
+  }
+}
